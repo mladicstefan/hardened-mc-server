@@ -33,8 +33,8 @@ check_docker() {
         exit 1
     fi
 
-    if ! command -v docker-compose &>/dev/null && ! docker compose version &>/dev/null 2>&1; then
-        print_error "Docker Compose is not installed"
+    if ! docker compose version &>/dev/null 2>&1; then
+        print_error "Docker Compose plugin is not installed"
         exit 1
     fi
 }
@@ -67,7 +67,7 @@ start_server() {
         echo '[]' >ops.json
     fi
 
-    docker-compose up -d
+    docker compose up -d
 
     print_success "Server started successfully"
     print_status "Waiting for server to be ready..."
@@ -75,10 +75,10 @@ start_server() {
 
     if is_running; then
         print_success "Server is running"
-        docker-compose logs --tail=20
+        docker compose logs --tail=20
     else
         print_error "Server failed to start"
-        docker-compose logs --tail=50
+        docker compose logs --tail=50
         exit 1
     fi
 }
@@ -91,7 +91,7 @@ stop_server() {
         return 0
     fi
 
-    docker-compose down
+    docker compose down
 
     print_success "Server stopped successfully"
 }
@@ -110,7 +110,7 @@ status_server() {
         docker stats --no-stream "$CONTAINER_NAME"
         echo ""
         print_status "Recent logs:"
-        docker-compose logs --tail=20
+        docker compose logs --tail=20
     else
         print_warning "Server is not running"
     fi
@@ -118,7 +118,7 @@ status_server() {
 
 logs_server() {
     if is_running; then
-        docker-compose logs -f
+        docker compose logs -f
     else
         print_error "Server is not running"
         exit 1
@@ -127,7 +127,7 @@ logs_server() {
 
 rebuild_server() {
     print_status "Rebuilding server image..."
-    docker-compose build --no-cache
+    docker compose build --no-cache
     print_success "Rebuild complete"
 
     read -p "Restart server now? (y/n) " -n 1 -r
