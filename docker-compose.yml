@@ -28,8 +28,9 @@ services:
     read_only: true
 
     tmpfs:
-      - /tmp:noexec,nosuid,nodev,size=512m
-      - /minecraft/cache:noexec,nosuid,nodev,size=256m
+      - /tmp:noexec,nosuid,nodev,size=512m,uid=25565,gid=25565
+      - /minecraft/versions:noexec,nosuid,nodev,size=256m,uid=25565,gid=25565
+      - /minecraft/libraries:noexec,nosuid,nodev,size=256m,uid=25565,gid=25565
 
     cap_drop:
       - ALL
