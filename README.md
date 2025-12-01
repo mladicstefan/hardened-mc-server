@@ -1,6 +1,6 @@
 # Hardened Minecraft Server
 
-A security-first Docker deployment for Minecraft Java Edition with defense-in-depth architecture.
+Yes, I really DO need a SOC2/ISO20071 complaint minecraft server.
 
 ## Quick Start
 
