@@ -6,19 +6,19 @@ Yes, I really DO need a SOC2/ISO20071 complaint minecraft server.
 
 ```bash
 chmod +x minecraft-control.sh
-sudo ./minecraft-control.sh start
+sudo ./server.sh start
 ```
 
 ## Server Control
 
 ```bash
-./server.sh start     # Start server
-./server.sh stop      # Stop server
-./server.sh restart   # Restart server
-./server.sh status    # View status & stats
-./server.sh logs      # Follow live logs
-./server.sh backup    # Backup world data
-./server.sh rebuild   # Rebuild from scratch
+sudo ./server.sh start     # Start server
+sudo ./server.sh stop      # Stop server
+sudo ./server.sh restart   # Restart server
+sudo ./server.sh status    # View status & stats
+sudo ./server.sh logs      # Follow live logs
+sudo ./server.sh backup    # Backup world data
+sudo ./server.sh rebuild   # Rebuild from scratch
 ```
 
 ## Client Mode Configuration
@@ -42,6 +42,7 @@ sudo ufw allow from 1.2.3.4 to any port 25565
 sudo ufw allow from 5.6.7.8 to any port 25565
 sudo ufw enable
 ```
+or Hetzner/Whatever firewall implementation
 
 ## Player Management
 
