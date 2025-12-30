@@ -6,40 +6,24 @@ services:
       target: production
       args:
         - MC_VERSION=1.21.4
-
     container_name: minecraft-server
     hostname: minecraft-srv
-
     ports:
       - "25565:25565"
-
-    environment:
-      - DISABLE_HEALTHCHECK=false
-
     volumes:
-      - minecraft_world:/minecraft/world
-      - minecraft_logs:/minecraft/logs
+      - minecraft_data:/minecraft
       - ./whitelist.json:/minecraft/whitelist.json:ro
       - ./ops.json:/minecraft/ops.json:ro
-
     networks:
       - minecraft_network
-
     read_only: true
-
     tmpfs:
       - /tmp:noexec,nosuid,nodev,size=512m,uid=25565,gid=25565
-      - /minecraft/versions:noexec,nosuid,nodev,size=256m,uid=25565,gid=25565
-      - /minecraft/libraries:noexec,nosuid,nodev,size=256m,uid=25565,gid=25565
-
     cap_drop:
       - ALL
-
     security_opt:
       - no-new-privileges:true
-
     user: "25565:25565"
-
     deploy:
       resources:
         limits:
@@ -48,56 +32,35 @@ services:
         reservations:
           cpus: "2"
           memory: 2G
-
       restart_policy:
         condition: on-failure
         delay: 10s
         max_attempts: 3
         window: 120s
-
     logging:
       driver: "json-file"
       options:
         max-size: "20m"
         max-file: "5"
-        labels: "service=minecraft,environment=production"
-        tag: "{{.Name}}/{{.ID}}"
-
     healthcheck:
       test: ["CMD", "pgrep", "-f", "java.*server.jar"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 90s
-
     privileged: false
     ipc: private
 
 volumes:
-  minecraft_world:
+  minecraft_data:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: /opt/minecraft/world
-  
-  minecraft_logs:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/minecraft/logs
+      device: /opt/minecraft/data
 
 networks:
   minecraft_network:
     driver: bridge
-    internal: false
     driver_opts:
-      com.docker.network.bridge.name: br-minecraft
-      com.docker.network.bridge.enable_ip_masquerade: "true"
       com.docker.network.bridge.enable_icc: "false"
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.25.0.0/24
-          gateway: 172.25.0.1

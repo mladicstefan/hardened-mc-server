@@ -51,10 +51,27 @@ start_server() {
         return 0
     fi
 
-    if [ ! -d "/opt/minecraft/world" ]; then
-        print_status "Creating directories..."
-        sudo mkdir -p /opt/minecraft/{world,logs}
-        sudo chown -R 25565:25565 /opt/minecraft
+    DATA_DIR="/opt/minecraft/data"
+
+    if [ ! -d "$DATA_DIR" ]; then
+        print_status "Creating data directory..."
+        sudo mkdir -p "$DATA_DIR"
+        sudo chown -R 25565:25565 "$DATA_DIR"
+
+        # Extract server files from image on first run
+        print_status "Extracting server files..."
+        docker compose build --quiet
+        docker compose run --rm --entrypoint="" minecraft \
+            sh -c "cp /minecraft/server.jar /minecraft/eula.txt /minecraft/server.properties /opt/out/" \
+            2>/dev/null || {
+            # Alternative: copy from a temporary container
+            TEMP_CONTAINER=$(docker create minecraft-server)
+            docker cp "$TEMP_CONTAINER":/minecraft/server.jar "$DATA_DIR/"
+            docker cp "$TEMP_CONTAINER":/minecraft/eula.txt "$DATA_DIR/"
+            docker cp "$TEMP_CONTAINER":/minecraft/server.properties "$DATA_DIR/"
+            docker rm "$TEMP_CONTAINER"
+        }
+        sudo chown -R 25565:25565 "$DATA_DIR"
     fi
 
     if [ ! -f "whitelist.json" ]; then
@@ -68,8 +85,8 @@ start_server() {
     fi
 
     docker compose up -d
-
     print_success "Server started successfully"
+
     print_status "Waiting for server to be ready..."
     sleep 10
 
