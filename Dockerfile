@@ -12,20 +12,18 @@ FROM base AS builder
 
 WORKDIR /build
 
-ARG MC_VERSION=1.21.4
-
+ARG MC_VERSION=1.21.11
 RUN curl -o server.jar \
-    "https://piston-data.mojang.com/v1/objects/4707d00eb834b446575d89a61a11b5d548d8c001/server.jar"
+    "https://piston-data.mojang.com/v1/objects/64bb6d763bed0a9f1d632ec347938594144943ed/server.jar"
 
 RUN echo "eula=true" > eula.txt
-
 RUN cat > server.properties << 'EOF'
 server-ip=0.0.0.0
 server-port=25565
 max-players=20
 online-mode=false
-white-list=true
-enforce-whitelist=true
+white-list=false
+enforce-whitelist=false
 pvp=true
 difficulty=hard
 gamemode=survival
@@ -93,4 +91,4 @@ CMD ["java", "-Xmx2G", "-Xms1G", "-XX:+UseG1GC", "-XX:+ParallelRefProcEnabled", 
 
 LABEL org.opencontainers.image.title="Hardened Minecraft Server" \
       org.opencontainers.image.description="Security-hardened Minecraft Java Edition server" \
-      minecraft.version="1.21.4"
+      minecraft.version="1.21.11"
