@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
       target: production
       args:
-        - MC_VERSION=1.21.4
+        - MC_VERSION=1.21.11
 
     container_name: minecraft-server
     hostname: minecraft-srv
@@ -17,18 +17,17 @@ services:
       - DISABLE_HEALTHCHECK=false
 
     volumes:
+      - minecraft_data:/minecraft
       - minecraft_world:/minecraft/world
       - minecraft_logs:/minecraft/logs
-      - ./whitelist.json:/minecraft/whitelist.json:ro
-      - ./ops.json:/minecraft/ops.json:ro
 
     networks:
       - minecraft_network
 
-    read_only: true
+#    read_only: true
 
     tmpfs:
-      - /tmp:noexec,nosuid,nodev,size=512m,uid=25565,gid=25565
+      - /tmp:noexec,nosuid,nodev,size=1G,uid=25565,gid=25565
       - /minecraft/versions:noexec,nosuid,nodev,size=256m,uid=25565,gid=25565
       - /minecraft/libraries:noexec,nosuid,nodev,size=256m,uid=25565,gid=25565
 
@@ -43,8 +42,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "4"
-          memory: 4G
+          cpus: "2"
+          memory: 2G
         reservations:
           cpus: "2"
           memory: 2G
@@ -74,13 +73,20 @@ services:
     ipc: private
 
 volumes:
+  minecraft_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/minecraft/data
+
   minecraft_world:
     driver: local
     driver_opts:
       type: none
       o: bind
       device: /opt/minecraft/world
-  
+
   minecraft_logs:
     driver: local
     driver_opts:

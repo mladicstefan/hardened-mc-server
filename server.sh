@@ -137,8 +137,20 @@ rebuild_server() {
     fi
 }
 
+build_server(){
+    print_status "Rebuilding server image..."
+    docker compose build --no-cache --pull
+    print_success "Rebuild complete"
+
+    read -p "Start server now? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+       start_server 
+    fi
+}
+
 backup_world() {
-    BACKUP_DIR="/opt/minecraft/backups"
+    BACKUP_DIR="/opt/minecraft/world"
     BACKUP_FILE="$BACKUP_DIR/world-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
 
     print_status "Creating world backup..."
@@ -173,6 +185,9 @@ check_docker
 case "$1" in
 start)
     start_server
+    ;;
+build)
+    build_server
     ;;
 stop)
     stop_server
