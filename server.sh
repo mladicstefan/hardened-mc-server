@@ -1,6 +1,5 @@
 #!/bin/bash
-
-set -e
+set -euo pipefail
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -9,22 +8,27 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 CONTAINER_NAME="minecraft-server"
-COMPOSE_FILE="docker-compose.yml"
+IMAGE_NAME="hardened-mc-server:latest"
+MC_UID=25565
+MC_GID=25565
 
-print_status() {
-    echo -e "${BLUE}[*]${NC} $1"
-}
+BASE_DIR="/opt/minecraft"
+DATA_DIR="$BASE_DIR/data"
+BACKUP_DIR="$BASE_DIR/backups"
 
-print_success() {
-    echo -e "${GREEN}[✓]${NC} $1"
-}
+# Always operate relative to the repo, wherever the script is called from.
+cd "$(dirname "$(readlink -f "$0")")"
 
-print_error() {
-    echo -e "${RED}[✗]${NC} $1"
-}
+print_status() { echo -e "${BLUE}[*]${NC} $1"; }
+print_success() { echo -e "${GREEN}[✓]${NC} $1"; }
+print_error() { echo -e "${RED}[✗]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
 
-print_warning() {
-    echo -e "${YELLOW}[!]${NC} $1"
+check_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        print_error "Run this script with sudo"
+        exit 1
+    fi
 }
 
 check_docker() {
@@ -32,8 +36,7 @@ check_docker() {
         print_error "Docker is not installed"
         exit 1
     fi
-
-    if ! docker compose version &>/dev/null 2>&1; then
+    if ! docker compose version &>/dev/null; then
         print_error "Docker Compose plugin is not installed"
         exit 1
     fi
@@ -41,6 +44,46 @@ check_docker() {
 
 is_running() {
     docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"
+}
+
+ensure_image() {
+    if ! docker image inspect "$IMAGE_NAME" &>/dev/null; then
+        print_status "Building image $IMAGE_NAME..."
+        docker compose build
+    fi
+}
+
+# Copy default eula.txt / server.properties from the image into the data dir,
+# but only if they don't exist yet (never overwrite user edits).
+seed_defaults() {
+    local missing=()
+    for f in eula.txt server.properties; do
+        [ -f "$DATA_DIR/$f" ] || missing+=("$f")
+    done
+    [ ${#missing[@]} -eq 0 ] && return 0
+
+    print_status "Seeding default config: ${missing[*]}"
+    local tmp
+    tmp="$(docker create "$IMAGE_NAME")"
+    for f in "${missing[@]}"; do
+        docker cp "$tmp:/opt/minecraft-server/defaults/$f" "$DATA_DIR/$f"
+    done
+    docker rm "$tmp" >/dev/null
+}
+
+# Runs on EVERY start, not just the first one.
+prepare_data_dir() {
+    mkdir -p "$DATA_DIR"
+    seed_defaults
+    chown -R "$MC_UID:$MC_GID" "$DATA_DIR"
+    chmod 750 "$DATA_DIR"
+}
+
+ensure_player_files() {
+    [ -f whitelist.json ] || { print_status "Creating whitelist.json..."; echo '[]' > whitelist.json; }
+    [ -f ops.json ] || { print_status "Creating ops.json..."; echo '[]' > ops.json; }
+    # Mounted read-only into the container; must be readable by UID 25565.
+    chmod 644 whitelist.json ops.json
 }
 
 start_server() {
@@ -51,41 +94,11 @@ start_server() {
         return 0
     fi
 
-    DATA_DIR="/opt/minecraft/data"
-
-    if [ ! -d "$DATA_DIR" ]; then
-        print_status "Creating data directory..."
-        sudo mkdir -p "$DATA_DIR"
-        sudo chown -R 25565:25565 "$DATA_DIR"
-
-        # Extract server files from image on first run
-        print_status "Extracting server files..."
-        docker compose build --quiet
-        docker compose run --rm --entrypoint="" minecraft \
-            sh -c "cp /minecraft/server.jar /minecraft/eula.txt /minecraft/server.properties /opt/out/" \
-            2>/dev/null || {
-            # Alternative: copy from a temporary container
-            TEMP_CONTAINER=$(docker create minecraft-server)
-            docker cp "$TEMP_CONTAINER":/minecraft/server.jar "$DATA_DIR/"
-            docker cp "$TEMP_CONTAINER":/minecraft/eula.txt "$DATA_DIR/"
-            docker cp "$TEMP_CONTAINER":/minecraft/server.properties "$DATA_DIR/"
-            docker rm "$TEMP_CONTAINER"
-        }
-        sudo chown -R 25565:25565 "$DATA_DIR"
-    fi
-
-    if [ ! -f "whitelist.json" ]; then
-        print_status "Creating whitelist.json..."
-        echo '[]' >whitelist.json
-    fi
-
-    if [ ! -f "ops.json" ]; then
-        print_status "Creating ops.json..."
-        echo '[]' >ops.json
-    fi
+    ensure_image
+    prepare_data_dir
+    ensure_player_files
 
     docker compose up -d
-    print_success "Server started successfully"
 
     print_status "Waiting for server to be ready..."
     sleep 10
@@ -102,14 +115,11 @@ start_server() {
 
 stop_server() {
     print_status "Stopping Minecraft server..."
-
     if ! is_running; then
         print_warning "Server is not running"
         return 0
     fi
-
     docker compose down
-
     print_success "Server stopped successfully"
 }
 
@@ -144,9 +154,8 @@ logs_server() {
 
 rebuild_server() {
     print_status "Rebuilding server image..."
-    docker compose build --no-cache
+    docker compose build --no-cache --pull
     print_success "Rebuild complete"
-
     read -p "Restart server now? (y/n) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -154,37 +163,43 @@ rebuild_server() {
     fi
 }
 
-build_server(){
-    print_status "Rebuilding server image..."
-    docker compose build --no-cache --pull
-    print_success "Rebuild complete"
-
+build_server() {
+    print_status "Building server image..."
+    docker compose build --pull
+    print_success "Build complete"
     read -p "Start server now? (y/n) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-       start_server 
+        start_server
     fi
 }
 
 backup_world() {
-    BACKUP_DIR="/opt/minecraft/world"
-    BACKUP_FILE="$BACKUP_DIR/world-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
+    if [ ! -d "$DATA_DIR/world" ]; then
+        print_error "No world found at $DATA_DIR/world"
+        exit 1
+    fi
+
+    local backup_file="$BACKUP_DIR/world-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
 
     print_status "Creating world backup..."
+    mkdir -p "$BACKUP_DIR"
+    chmod 700 "$BACKUP_DIR"
 
-    sudo mkdir -p "$BACKUP_DIR"
-    sudo tar -czf "$BACKUP_FILE" -C /opt/minecraft world
+    if is_running; then
+        print_warning "Server is running; backup is taken live (session.lock is excluded)"
+    fi
 
-    print_success "Backup created: $BACKUP_FILE"
+    tar -czf "$backup_file" --exclude='world/session.lock' -C "$DATA_DIR" world
 
-    BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
-    print_status "Backup size: $BACKUP_SIZE"
+    print_success "Backup created: $backup_file"
+    print_status "Backup size: $(du -h "$backup_file" | cut -f1)"
 }
 
 show_help() {
     echo "Minecraft Server Control Script"
     echo ""
-    echo "Usage: $0 {start|stop|restart|status|logs|rebuild|backup}"
+    echo "Usage: sudo $0 {start|stop|restart|status|logs|build|rebuild|backup}"
     echo ""
     echo "Commands:"
     echo "  start    - Start the Minecraft server"
@@ -192,42 +207,22 @@ show_help() {
     echo "  restart  - Restart the Minecraft server"
     echo "  status   - Show server status and stats"
     echo "  logs     - Follow server logs (Ctrl+C to exit)"
+    echo "  build    - Build the Docker image"
     echo "  rebuild  - Rebuild Docker image from scratch"
-    echo "  backup   - Create world backup"
+    echo "  backup   - Create world backup in $BACKUP_DIR"
     echo ""
 }
 
-check_docker
-
-case "$1" in
-start)
-    start_server
-    ;;
-build)
-    build_server
-    ;;
-stop)
-    stop_server
-    ;;
-restart)
-    restart_server
-    ;;
-status)
-    status_server
-    ;;
-logs)
-    logs_server
-    ;;
-rebuild)
-    rebuild_server
-    ;;
-backup)
-    backup_world
-    ;;
-*)
-    show_help
-    exit 1
-    ;;
+case "${1:-}" in
+    start)   check_root; check_docker; start_server ;;
+    stop)    check_root; check_docker; stop_server ;;
+    restart) check_root; check_docker; restart_server ;;
+    status)  check_root; check_docker; status_server ;;
+    logs)    check_root; check_docker; logs_server ;;
+    build)   check_root; check_docker; build_server ;;
+    rebuild) check_root; check_docker; rebuild_server ;;
+    backup)  check_root; backup_world ;;
+    *)       show_help; exit 1 ;;
 esac
 
 exit 0

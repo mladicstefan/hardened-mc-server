@@ -8,18 +8,24 @@ services:
         - MC_VERSION=26.3
         - LEVEL_SEED=-189338900904967843
 
+    image: hardened-mc-server:latest
     container_name: minecraft-server
     hostname: minecraft-srv
+
+    stdin_open: true
+    tty: true
     ports:
       - "25565:25565"
+
     volumes:
       - minecraft_data:/minecraft
       - ./whitelist.json:/minecraft/whitelist.json:ro
       - ./ops.json:/minecraft/ops.json:ro
+
     networks:
       - minecraft_network
 
-#    read_only: true
+    # read_only: true
 
     tmpfs:
       - /tmp:noexec,nosuid,nodev,size=1G,uid=25565,gid=25565
@@ -28,9 +34,12 @@ services:
 
     cap_drop:
       - ALL
+
     security_opt:
       - no-new-privileges:true
+
     user: "25565:25565"
+
     deploy:
       resources:
         limits:
@@ -44,41 +53,31 @@ services:
         delay: 10s
         max_attempts: 3
         window: 120s
+
     logging:
       driver: "json-file"
       options:
         max-size: "20m"
         max-file: "5"
+
     healthcheck:
       test: ["CMD", "pgrep", "-f", "java.*server.jar"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 90s
+
     privileged: false
     ipc: private
 
 volumes:
+  # World, logs and runtime config all live here (host: /opt/minecraft/data).
   minecraft_data:
     driver: local
     driver_opts:
       type: none
       o: bind
       device: /opt/minecraft/data
-
-  minecraft_world:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/minecraft/world
-
-  minecraft_logs:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/minecraft/logs
 
 networks:
   minecraft_network:
