@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM cgr.dev/chainguard/wolfi-base:latest AS base
 
 USER root
@@ -10,11 +11,26 @@ RUN mkdir -p /minecraft/world /minecraft/logs /minecraft/versions /minecraft/lib
 
 FROM base AS builder
 
+RUN apk add --no-cache jq
+
 WORKDIR /build
 
-ARG MC_VERSION=1.21.11
-RUN curl -o server.jar \
-    "https://piston-data.mojang.com/v1/objects/64bb6d763bed0a9f1d632ec347938594144943ed/server.jar"
+# Mojang switched to year-based versioning in 2026: it's "26.3", not "1.26.3"
+ARG MC_VERSION=26.3
+
+# Resolve the server jar from Mojang's official manifest and verify its SHA-1,
+# so bumping the version is a one-line change and a tampered/corrupt download fails the build.
+RUN set -eu; \
+    VERSION_URL="$(curl -fsSL https://piston-meta.mojang.com/mc/game/version_manifest_v2.json \
+      | jq -r --arg v "$MC_VERSION" '.versions[] | select(.id == $v) | .url')"; \
+    if [ -z "$VERSION_URL" ]; then echo "Minecraft version $MC_VERSION not found in manifest" >&2; exit 1; fi; \
+    curl -fsSL "$VERSION_URL" -o version.json; \
+    SERVER_URL="$(jq -r '.downloads.server.url' version.json)"; \
+    SERVER_SHA1="$(jq -r '.downloads.server.sha1' version.json)"; \
+    echo "MC $MC_VERSION requires Java $(jq -r '.javaVersion.majorVersion' version.json)"; \
+    curl -fsSL "$SERVER_URL" -o server.jar; \
+    echo "$SERVER_SHA1  server.jar" | sha1sum -c -; \
+    rm version.json
 
 RUN echo "eula=true" > eula.txt
 RUN cat > server.properties << 'EOF'
@@ -61,12 +77,14 @@ resource-pack=
 resource-pack-prompt=
 prevent-proxy-connections=false
 hide-online-players=false
-snooper-enabled=false
 function-permission-level=2
 text-filtering-config=
 EOF
 
+
 FROM cgr.dev/chainguard/jre:latest AS production
+
+ARG MC_VERSION=26.3
 
 WORKDIR /minecraft
 
@@ -91,4 +109,4 @@ CMD ["java", "-Xmx2G", "-Xms1G", "-XX:+UseG1GC", "-XX:+ParallelRefProcEnabled", 
 
 LABEL org.opencontainers.image.title="Hardened Minecraft Server" \
       org.opencontainers.image.description="Security-hardened Minecraft Java Edition server" \
-      minecraft.version="1.21.11"
+      minecraft.version="${MC_VERSION}"
