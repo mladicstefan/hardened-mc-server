@@ -15,11 +15,9 @@ RUN apk add --no-cache jq
 
 WORKDIR /build
 
-# Mojang switched to year-based versioning in 2026: it's "26.3", not "1.26.3"
 ARG MC_VERSION=26.3
+ARG LEVEL_SEED=""
 
-# Resolve the server jar from Mojang's official manifest and verify its SHA-1,
-# so bumping the version is a one-line change and a tampered/corrupt download fails the build.
 RUN set -eu; \
     VERSION_URL="$(curl -fsSL https://piston-meta.mojang.com/mc/game/version_manifest_v2.json \
       | jq -r --arg v "$MC_VERSION" '.versions[] | select(.id == $v) | .url')"; \
@@ -34,6 +32,7 @@ RUN set -eu; \
 
 RUN echo "eula=true" > eula.txt
 RUN cat > server.properties << 'EOF'
+level-seed=${LEVEL_SEED}
 server-ip=0.0.0.0
 server-port=25565
 max-players=20
