@@ -5,7 +5,8 @@ services:
       dockerfile: Dockerfile
       target: production
       args:
-        - MC_VERSION=1.21.11
+        - MC_VERSION=26.3
+        - LEVEL_SEED=-189338900904967843
 
     container_name: minecraft-server
     hostname: minecraft-srv
